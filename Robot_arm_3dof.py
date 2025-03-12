@@ -1,0 +1,86 @@
+import pybullet as p
+import pybullet_data
+import numpy as np
+import time
+from scipy.spatial.transform import Rotation as R
+
+def decompose_homogenous_matrix(T):
+    translation = T[:3, 3]
+    rotation = T[:3, :3]
+    quaternion = R.from_matrix(rotation).as_quat()
+    return translation, quaternion
+
+if __name__ == "__main__":
+    p.connect(p.GUI)
+    p.setAdditionalSearchPath(pybullet_data.getDataPath())
+    p.loadURDF("plane.urdf")
+    robot_id = p.loadURDF("urdf/3dof_planar_robot.urdf", basePosition=[0, 0, 0], useFixedBase=True)
+    
+    joint1_idx = 1
+    joint2_idx = 2
+    joint3_idx = 3
+    
+    theta1 = np.deg2rad(60)
+    theta2 = np.deg2rad(20)
+    theta3 = np.deg2rad(10)
+    
+    p.setJointMotorControl2(robot_id, joint1_idx, controlMode=p.POSITION_CONTROL, targetPosition=theta1)
+    p.setJointMotorControl2(robot_id, joint2_idx, controlMode=p.POSITION_CONTROL, targetPosition=theta2)
+    p.setJointMotorControl2(robot_id, joint3_idx, controlMode=p.POSITION_CONTROL, targetPosition=theta3)
+    
+    L1 = 1
+    L2 = 1
+    L3 = 1
+    
+    T_W_Base = np.eye(4)
+    T_W_Base[2, 3] = 0.05
+    
+    T1 = np.array([[np.cos(theta1), 0, np.sin(theta1), L1*np.sin(theta1)],
+                   [0, 1, 0, 0],
+                   [-np.sin(theta1), 0, np.cos(theta1), L1*np.cos(theta1)],
+                   [0, 0 , 0, 1]])
+    
+    T2 = np.array([[np.cos(theta2), 0, np.sin(theta2), L2*np.sin(theta2)],
+                   [0, 1, 0, 0],
+                   [-np.sin(theta2), 0, np.cos(theta2), L2*np.cos(theta2)],
+                   [0, 0 , 0, 1]])
+
+    T3 = np.array([[np.cos(theta3), 0, np.sin(theta3), L3*np.sin(theta3)],
+                   [0, 1, 0, 0],
+                   [-np.sin(theta3), 0, np.cos(theta3), L3*np.cos(theta3)],
+                   [0, 0 , 0, 1]])
+    
+    T_link1 = np.dot(T_W_Base, T1)
+    T_link2 = np.dot(T_link1, T2)
+    T_link3 = np.dot(T_link2, T3)
+    
+    link1_position, link1_orientation = decompose_homogenous_matrix(T_link1)
+    link2_position, link2_orientation = decompose_homogenous_matrix(T_link2)
+    link3_position, link3_orientation = decompose_homogenous_matrix(T_link3)
+    
+    print(f"Link1 Position: {link1_position}\n Link2 Position: {link2_position}\n Link3 Position: {link3_position}")
+    
+    sphere_collision_shape = p.createCollisionShape(shapeType=p.GEOM_SPHERE, radius=0.05)
+    sphere_visual_shape = p.createVisualShape(shapeType=p.GEOM_SPHERE, radius=0.05, rgbaColor=[0, 0, 1, 1])
+    p.createMultiBody(baseMass=0, baseCollisionShapeIndex=sphere_collision_shape, baseVisualShapeIndex=sphere_visual_shape, basePosition=link3_position)
+    
+    num_steps = 1000
+    axis_lenght = 0.2
+    
+    for t in range(num_steps):
+        p.addUserDebugLine(link1_position, link1_position + T_link1[:3, 0] * axis_lenght, [1, 0, 0], lineWidth=1.0)
+        p.addUserDebugLine(link1_position, link1_position + T_link1[:3, 1] * axis_lenght, [0, 1, 0], lineWidth=1.0)
+        p.addUserDebugLine(link1_position, link1_position + T_link1[:3, 2] * axis_lenght, [0, 0, 1], lineWidth=1.0)
+        
+        p.addUserDebugLine(link2_position, link2_position + T_link2[:3, 0] * axis_lenght, [1, 0, 0], lineWidth=1.0)
+        p.addUserDebugLine(link2_position, link2_position + T_link2[:3, 1] * axis_lenght, [0, 1, 0], lineWidth=1.0)
+        p.addUserDebugLine(link2_position, link2_position + T_link2[:3, 2] * axis_lenght, [0, 0, 1], lineWidth=1.0)
+
+        p.addUserDebugLine(link3_position, link3_position + T_link3[:3, 0] * axis_lenght, [1, 0, 0], lineWidth=1.0)
+        p.addUserDebugLine(link3_position, link3_position + T_link3[:3, 1] * axis_lenght, [0, 1, 0], lineWidth=1.0)
+        p.addUserDebugLine(link3_position, link3_position + T_link3[:3, 2] * axis_lenght, [0, 0, 1], lineWidth=1.0)
+        p.stepSimulation()
+        time.sleep(1)
+    
+    input("Press enter to exit")
+    p.disconnect()
